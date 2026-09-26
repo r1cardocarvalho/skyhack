@@ -19,12 +19,83 @@ export type Trip = {
   created_at: string;
 };
 
+export type DocumentKind = "ticket" | "booking" | "prescription" | "visa" | "insurance";
+
+export type VisaForm = {
+  name: string;
+  when: string;
+  href: string;
+  note: string;
+};
+
+export type VisaEntry = {
+  id: string;
+  trip_id: string;
+  country: string;
+  cities: string[];
+  dates: string | null;
+  needed: boolean | null;
+  requirement: string;
+  stay: string | null;
+  passport_rule: string | null;
+  forms: VisaForm[];
+  next_step: string | null;
+  source: string | null;
+  source_href: string | null;
+  passport: string | null;
+  document_id: string | null;
+  visa_type: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  stay_days: number | null;
+  entries: string | null;
+  document_notes: string | null;
+  position: number;
+};
+
+export type InsurancePolicy = {
+  id: string;
+  trip_id: string;
+  document_id: string | null;
+  insurer: string;
+  plan: string | null;
+  policy_number: string | null;
+  holder: string | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  emergency_phone: string | null;
+  coverage: string | null;
+  deductible: string | null;
+  territory: string | null;
+  notes: string | null;
+  position: number;
+};
+
 export type TripDocument = {
   id: string;
   trip_id: string;
   filename: string;
   storage_path: string;
   content_type: string;
+  kind: DocumentKind;
+  created_at: string;
+};
+
+export type MedicationTiming = "before" | "during" | "as-needed";
+
+export type Medication = {
+  id: string;
+  trip_id: string;
+  document_id: string | null;
+  name: string;
+  dose: string | null;
+  form: string | null;
+  schedule: string | null;
+  timing: MedicationTiming;
+  quantity: string | null;
+  purpose: string | null;
+  notes: string | null;
+  position: number;
   created_at: string;
 };
 
@@ -38,6 +109,7 @@ export type Segment = {
   origin: string | null;
   destination: string | null;
   document_id: string | null;
+  url: string | null;
   created_at: string;
 };
 
@@ -85,6 +157,15 @@ export function formatWhen(value: string | null) {
 export function formatDate(value: string | null) {
   if (!value) return null;
   return formatDay(value.slice(0, 10));
+}
+
+export function formatStay(start: string | null, end: string | null) {
+  const from = formatDate(start);
+  const to = formatDate(end);
+  if (from && to) return from === to ? from : `${from} – ${to}`;
+  if (from) return `From ${from}`;
+  if (to) return `Until ${to}`;
+  return null;
 }
 
 export function kindLabel(kind: SegmentKind) {

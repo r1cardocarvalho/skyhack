@@ -12,6 +12,7 @@ export type ParsedFlight = {
   startsAt: string;
   endsAt: string;
   layover?: boolean;
+  yearUnknown?: boolean;
 };
 
 const MONTHS: Record<string, number> = {
@@ -82,27 +83,32 @@ function citiesInOrder(text: string) {
 }
 
 function datesInOrder(text: string) {
-  const found: { index: number; day: string }[] = [];
+  const found: { index: number; day: string; yearUnknown: boolean }[] = [];
   for (const match of text.matchAll(/\b(\d{1,2})\s*([A-Za-z]{3,9})\.?\s*(\d{4})\b/g)) {
     const month = MONTHS[match[2].slice(0, 3).toLowerCase()];
     const day = month ? iso(Number(match[3]), month, Number(match[1])) : null;
-    if (day && match.index !== undefined) found.push({ index: match.index, day });
+    if (day && match.index !== undefined) found.push({ index: match.index, day, yearUnknown: false });
   }
   for (const match of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
     const day = iso(Number(match[1]), Number(match[2]), Number(match[3]));
-    if (day && match.index !== undefined) found.push({ index: match.index, day });
+    if (day && match.index !== undefined) found.push({ index: match.index, day, yearUnknown: false });
   }
   for (const match of text.matchAll(/\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b/g)) {
     const day = iso(Number(match[3]), Number(match[2]), Number(match[1]));
-    if (day && match.index !== undefined) found.push({ index: match.index, day });
+    if (day && match.index !== undefined) found.push({ index: match.index, day, yearUnknown: false });
+  }
+  for (const match of text.matchAll(/\b(\d{1,2})\s+([A-Za-z]{3,9})\b(?!\.?,?\s*\d{4})/g)) {
+    const month = MONTHS[match[2].slice(0, 3).toLowerCase()];
+    const day = month ? iso(2000, month, Number(match[1])) : null;
+    if (day && match.index !== undefined) found.push({ index: match.index, day, yearUnknown: true });
   }
 
-  found.sort((a, b) => a.index - b.index);
-  const days: string[] = [];
+  found.sort((a, b) => a.index - b.index || Number(a.yearUnknown) - Number(b.yearUnknown));
+  const days: { day: string; yearUnknown: boolean }[] = [];
   let lastIndex = -100;
   for (const item of found) {
     if (item.index < lastIndex + 8) continue;
-    days.push(item.day);
+    days.push({ day: item.day, yearUnknown: item.yearUnknown });
     lastIndex = item.index;
   }
   return days;
@@ -148,15 +154,19 @@ export function parseTicketText(raw: string): ParsedFlight[] {
   for (let i = 0; i < legs.length; i += 1) {
     let startDay: string | null = null;
     let endDay: string | null = null;
+    let yearUnknown = false;
     if (dates.length >= legs.length * 2) {
-      startDay = dates[i * 2];
-      endDay = dates[i * 2 + 1];
+      startDay = dates[i * 2].day;
+      endDay = dates[i * 2 + 1].day;
+      yearUnknown = dates[i * 2].yearUnknown || dates[i * 2 + 1].yearUnknown;
     } else if (dates.length >= legs.length) {
-      startDay = dates[i];
-      endDay = dates[i];
+      startDay = dates[i].day;
+      endDay = dates[i].day;
+      yearUnknown = dates[i].yearUnknown;
     } else if (i === 0 && dates[0]) {
-      startDay = dates[0];
-      endDay = dates[0];
+      startDay = dates[0].day;
+      endDay = dates[0].day;
+      yearUnknown = dates[0].yearUnknown;
     }
     if (!startDay || !endDay) continue;
 
@@ -165,6 +175,9 @@ export function parseTicketText(raw: string): ParsedFlight[] {
     if (times.length >= legs.length * 2) {
       startTime = times[i * 2];
       endTime = times[i * 2 + 1];
+    } else if (i === 0 && times.length >= 2) {
+      startTime = times[0];
+      endTime = times[1];
     } else if (times[i]) {
       startTime = times[i];
     }
@@ -180,6 +193,7 @@ export function parseTicketText(raw: string): ParsedFlight[] {
       destination,
       startsAt: `${startDay}T${startTime}:00`,
       endsAt: `${endDay}T${endTime}:00`,
+      yearUnknown: yearUnknown || undefined,
     });
   }
 

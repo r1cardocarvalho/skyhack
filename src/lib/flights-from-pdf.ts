@@ -1,3 +1,4 @@
+import { readModelJson } from "@/lib/azure";
 import {
   airportCity,
   canonicalDestination,
@@ -5,8 +6,6 @@ import {
   type StopDraft,
 } from "@/lib/destinations";
 import type { ParsedFlight } from "@/lib/parse-ticket";
-
-const MODEL = "gemini-3.5-flash-lite";
 const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const MAX_FLIGHTS = 20;
 const MONTHS: Record<string, number> = {
@@ -194,20 +193,93 @@ export function alignFlightYears<T extends ParsedFlight>(flights: T[]): T[] {
   });
 }
 
-export function prepareFlights<T extends ParsedFlight>(flights: T[]): T[] {
-  const named = flights.map((flight) => ({
-    ...flight,
-    origin: canonicalDestination(flight.origin),
-    destination: canonicalDestination(flight.destination),
-  }));
-  const sorted = alignFlightYears(named);
-  const seen = new Set<string>();
-  return sorted.filter((flight) => {
-    const key = [flight.origin, flight.destination, flight.startsAt, flight.title].join("|").toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+const UNKNOWN_YEAR = 2000;
+
+export function pinFlightYears<T extends ParsedFlight>(flights: T[], pdfText: string): T[] {
+  const printed = new Set([...pdfText.matchAll(/\b(20\d{2})\b/g)].map((match) => match[1]));
+  return flights.map((flight) => {
+    const startYear = flight.startsAt.slice(0, 4);
+    if (printed.size > 0 && printed.has(startYear)) return flight;
+    const endYear = Number(flight.endsAt.slice(0, 4));
+    return {
+      ...flight,
+      yearUnknown: true,
+      startsAt: `${UNKNOWN_YEAR}${flight.startsAt.slice(4)}`,
+      endsAt: `${UNKNOWN_YEAR + (endYear - Number(startYear))}${flight.endsAt.slice(4)}`,
+    };
   });
+}
+
+function resolveUnknownYears<T extends ParsedFlight>(flights: T[]): T[] {
+  const knownStarts = flights
+    .filter((flight) => !flight.yearUnknown && !flight.startsAt.startsWith(`${UNKNOWN_YEAR}-`))
+    .map((flight) => flight.startsAt);
+  const knownYears = [...new Set(knownStarts.map((start) => Number(start.slice(0, 4))))];
+
+  return flights.map((flight) => {
+    if (!flight.yearUnknown && !flight.startsAt.startsWith(`${UNKNOWN_YEAR}-`)) return flight;
+    const year = chooseYear(flight.startsAt.slice(5, 10), knownStarts, knownYears);
+    const startYear = Number(flight.startsAt.slice(0, 4));
+    const endYear = Number(flight.endsAt.slice(0, 4));
+    return {
+      ...flight,
+      yearUnknown: false,
+      startsAt: `${year}${flight.startsAt.slice(4)}`,
+      endsAt: `${year + (endYear - startYear)}${flight.endsAt.slice(4)}`,
+    };
+  });
+}
+
+function chooseYear(monthDay: string, knownStarts: string[], knownYears: number[]) {
+  const pool = knownYears.length > 0 ? knownYears : [new Date().getFullYear()];
+  const options = new Set<number>(pool);
+  for (const year of pool) options.add(year - 1);
+
+  let bestYear = [...options][0];
+  let bestScore = Infinity;
+  for (const year of options) {
+    const day = `${year}-${monthDay}`;
+    if (knownStarts.length === 0) return year;
+    let score = Infinity;
+    for (const start of knownStarts) {
+      const startDay = start.slice(0, 10);
+      const distance = Math.abs(daysBetween(`${day}T00:00:00`, start));
+      const ranked = startDay >= day ? distance : distance + 400;
+      if (ranked < score) score = ranked;
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      bestYear = year;
+    }
+  }
+  return bestYear;
+}
+
+export function prepareFlights<T extends ParsedFlight>(flights: T[]): T[] {
+  const named = flights
+    .filter(
+      (flight) =>
+        Number.isFinite(Date.parse(flight.startsAt)) &&
+        Number.isFinite(Date.parse(flight.endsAt)) &&
+        Date.parse(flight.endsAt) >= Date.parse(flight.startsAt),
+    )
+    .map((flight) => ({
+      ...flight,
+      origin: canonicalDestination(flight.origin),
+      destination: canonicalDestination(flight.destination),
+    }));
+  const sorted = alignFlightYears(resolveUnknownYears(named));
+  const byKey = new Map<string, (typeof sorted)[number]>();
+  for (const flight of sorted) {
+    const key = [flight.origin, flight.destination, flight.startsAt, flight.title].join("|").toLowerCase();
+    const current = byKey.get(key);
+    if (!current || (!hasSavedId(current) && hasSavedId(flight))) byKey.set(key, flight);
+  }
+  return [...byKey.values()].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+function hasSavedId(flight: ParsedFlight) {
+  return "id" in flight && typeof (flight as { id?: unknown }).id === "string";
 }
 
 export function staysFromFlights(flights: ParsedFlight[]): StopDraft[] {
@@ -224,7 +296,7 @@ export function staysFromFlights(flights: ParsedFlight[]): StopDraft[] {
     const next = unique.slice(index + 1).find((item) => sameDestination(item.origin, city));
     if (!next) {
       if (sameDestination(city, home)) continue;
-      stays.push({ name: city, startsOn: arrivedOn, endsOn: arrivedOn });
+      stays.push({ name: city, startsOn: arrivedOn, endsOn: null });
       continue;
     }
     const leftOn = next.startsAt.slice(0, 10);
@@ -240,7 +312,8 @@ export function staysFromFlights(flights: ParsedFlight[]): StopDraft[] {
     const last = merged[merged.length - 1];
     if (last && sameDestination(last.name, stay.name)) {
       if (stay.startsOn < last.startsOn) last.startsOn = stay.startsOn;
-      if (stay.endsOn > last.endsOn) last.endsOn = stay.endsOn;
+      if (!last.endsOn || !stay.endsOn) last.endsOn = null;
+      else if (stay.endsOn > last.endsOn) last.endsOn = stay.endsOn;
       continue;
     }
     merged.push({ ...stay });
@@ -248,62 +321,18 @@ export function staysFromFlights(flights: ParsedFlight[]): StopDraft[] {
   return merged;
 }
 
-function jsonFromModelText(text: string) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const body = (fenced?.[1] ?? text).trim();
-  return JSON.parse(body) as unknown;
-}
-
 export async function flightsFromPdf(bytes: Uint8Array): Promise<ParsedFlight[]> {
-  const key = process.env.GEMINI_API_KEY?.trim();
-  if (!key) throw new Error("missing-key");
   if (bytes.byteLength === 0 || bytes.byteLength > 8_000_000) throw new Error("bad-file");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": key,
-      },
-      signal: AbortSignal.timeout(25_000),
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: "Read this plane ticket. Return every flight leg, including connections. A connection is a city where the passenger only changes planes and does not stay the night, such as Abu Dhabi between Lisbon and Hanoi. Use the city, never the airport: Ngurah Rai and Denpasar are Bali, Don Mueang is Bangkok, Ha Noi is Hanoi. Copy the year printed on the ticket.",
-              },
-              {
-                inline_data: {
-                  mime_type: "application/pdf",
-                  data: Buffer.from(bytes).toString("base64"),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 1024,
-          thinkingConfig: { thinkingLevel: "minimal" },
-          responseMimeType: "application/json",
-          responseJsonSchema: SCHEMA,
-        },
-      }),
-    },
-  );
-
-  if (!response.ok) throw new Error("model");
-
-  const payload = (await response.json()) as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[];
-  };
-  const text = (payload.candidates?.[0]?.content?.parts ?? [])
-    .map((part) => part.text ?? "")
-    .join("")
-    .trim();
-  if (!text) return [];
-  return flightsFromModelJson(jsonFromModelText(text));
+  const raw = await readModelJson({
+    instructions:
+      "Read this plane ticket or boarding pass. Return every flight leg, including connections. A connection is a city where the passenger only changes planes and does not stay the night, such as Abu Dhabi between Lisbon and Hanoi. Use the city, never the airport: Ngurah Rai and Denpasar are Bali, Don Mueang is Bangkok, Ha Noi is Hanoi. Copy the year printed on the ticket. If the pass prints a day and month but no year, such as 02 Sep, still return the leg and use year 2000.",
+    schema: SCHEMA,
+    schemaName: "flights",
+    pdf: bytes,
+    maxOutputTokens: 1024,
+    timeoutMs: 25_000,
+  });
+  if (!raw) return [];
+  return flightsFromModelJson(raw);
 }

@@ -9,17 +9,19 @@ export function AuthForm() {
 
   return (
     <form action={creating ? signUp : signIn} className="panel">
-      <div className="account">
+      <div className="segmented" role="group" aria-label="Account">
         <button
           type="button"
-          className={creating ? "btn-quiet" : buttonClass}
+          className={creating ? undefined : "on"}
+          aria-pressed={!creating}
           onClick={() => setCreating(false)}
         >
           Sign in
         </button>
         <button
           type="button"
-          className={creating ? buttonClass : "btn-quiet"}
+          className={creating ? "on" : undefined}
+          aria-pressed={creating}
           onClick={() => setCreating(true)}
         >
           Create account
@@ -46,7 +48,7 @@ export function AuthForm() {
           className={fieldClass}
         />
       </label>
-      <button type="submit" className={buttonClass}>
+      <button type="submit" className={`${buttonClass} btn-block`}>
         {creating ? "Create account" : "Sign in"}
       </button>
     </form>

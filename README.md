@@ -52,7 +52,7 @@ supabase start
 - `PUBLISHABLE_KEY` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SECRET_KEY` → `SUPABASE_SECRET_KEY`
 
-Plane tickets are read on the server with `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey). Without that key, upload falls back to the text parser.
+Plane tickets, bookings, and prescriptions are read with an Azure OpenAI key in `AZURE_OPENAI_API_KEY`. `AZURE_OPENAI_MODEL` is the deployment name, `gpt-5.6-terra` unless the portal shows a different one. Without that key, a text PDF still falls back to the text parser.
 
 Then:
 

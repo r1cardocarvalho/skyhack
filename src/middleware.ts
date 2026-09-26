@@ -23,10 +23,20 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const login = request.nextUrl.pathname === "/login";
+
+  if (!user && !login) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  if (user && login) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
   return response;
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|brand/).*)"],
 };
