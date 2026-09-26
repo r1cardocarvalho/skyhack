@@ -34,10 +34,27 @@ Travel agent assistant:
 - Days spent in a country
 - Flight delays and terminal info
 
-## Run
+## Run it locally
+
+You need [Node.js](https://nodejs.org), [Docker Desktop](https://www.docker.com/products/docker-desktop/) (open and running), and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
 
 ```bash
+git clone git@github.com:r1cardocarvalho/skyhack.git
+cd skyhack
+npm install
+cp .env.example .env.local
 supabase start
+```
+
+`supabase start` prints the local keys. Paste them into `.env.local`:
+
+- `API_URL` → `NEXT_PUBLIC_SUPABASE_URL`
+- `PUBLISHABLE_KEY` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SECRET_KEY` → `SUPABASE_SECRET_KEY`
+
+Then:
+
+```bash
 npm run dev
 ```
 
@@ -45,4 +62,4 @@ App: http://localhost:3000
 
 Supabase Studio: http://127.0.0.1:57323
 
-API: http://127.0.0.1:57321
+Next time, Docker and `supabase start` are enough before `npm run dev`. Stop the database with `supabase stop`.
