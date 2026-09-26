@@ -1,0 +1,48 @@
+# SKYHACK 2026
+
+[skyhack.lxlaunch.com](https://skyhack.lxlaunch.com/)
+
+Sep 26, 2026 · Impact Hub Lisbon · 10 hours · 50 hackers
+
+**Tracks:** Healthcare · AI Agents
+
+**Freeze:** 19:00 · **Demos:** 20:00
+
+**Prizes:** €1,500 / €500 per track, plus €500 overall
+
+## What we're building
+
+An AI-native [TripIt](https://www.tripit.com/web/free).
+
+TripIt turns booking emails into one itinerary. We do the same with an agent: drop in confirmations, and it builds the trip, keeps it current, and answers "what's next?"
+
+**Now:** Next.js + Supabase. **AI:** later, if there's time.
+
+## Ideas
+
+Travel agent assistant:
+
+- Different time zones
+- Flights and reservations
+- SIM card
+- Chargers up front
+- Interests
+- Events happening around you
+- Common scams
+- Personalised documents
+- Visa information
+- Days spent in a country
+- Flight delays and terminal info
+
+## Run
+
+```bash
+supabase start
+npm run dev
+```
+
+App: http://localhost:3000
+
+Supabase Studio: http://127.0.0.1:57323
+
+API: http://127.0.0.1:57321
