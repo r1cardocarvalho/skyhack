@@ -1,69 +1,101 @@
-import Image from "next/image";
+import Link from "next/link";
+import { createTrip } from "@/app/actions";
+import { ErrorNote, Shell, buttonClass, fieldClass } from "@/components/shell";
+import { formatDate, supabase } from "@/lib/trips";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error: errorCode } = await searchParams;
+  const db = await supabase();
+  const { data, error } = await db
+    .from("trips")
+    .select(
+      "id, title, start_date, end_date, created_at, segments(id), destinations(name, position, starts_on, ends_on)",
+    )
+    .order("created_at", { ascending: false });
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <Shell>
+      <header className="stack">
+        <p className="kicker">Your trips</p>
+        <h1 className="title">Where you are going</h1>
+        <p className="lede">
+          Name the trip. On the next page, add the stops yourself or upload the
+          plane tickets.
+        </p>
+      </header>
+
+      <ErrorNote code={errorCode} />
+
+      {error ? (
+        <p role="alert" className="alert">
+          Could not load trips. {error.message}
+        </p>
+      ) : (
+        <ul className="trip-list">
+          {(data ?? []).length === 0 ? (
+            <li className="empty">No trips yet.</li>
+          ) : (
+            data?.map((trip) => {
+              const count = Array.isArray(trip.segments) ? trip.segments.length : 0;
+              const route = routeOf(trip.destinations);
+              return (
+                <li key={trip.id}>
+                  <Link href={`/trips/${trip.id}`} className="trip-card">
+                    <span>
+                      <strong>{trip.title}</strong>
+                      <span className="place">{route || "No stops yet"}</span>
+                    </span>
+                    <span>
+                      {count} {count === 1 ? "booking" : "bookings"}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      )}
+
+      <form action={createTrip} className="panel">
+        <h2>Create a trip</h2>
+        <label className="field-label">
+          Name
+          <input name="title" required className={fieldClass} placeholder="September trip" />
+        </label>
+        <button type="submit" className={buttonClass}>
+          Create trip
+        </button>
+      </form>
+    </Shell>
   );
+}
+
+function routeOf(
+  value: { name: string; position: number; starts_on: string | null; ends_on: string | null }[] | null,
+) {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  return [...value]
+    .sort(byStart)
+    .map((stop) => {
+      const when = [formatDate(stop.starts_on), formatDate(stop.ends_on)]
+        .filter(Boolean)
+        .join("–");
+      return when ? `${stop.name} ${when}` : stop.name;
+    })
+    .join(" → ");
+}
+
+function byStart(
+  a: { starts_on: string | null; position: number },
+  b: { starts_on: string | null; position: number },
+) {
+  const start = (a.starts_on ?? "9999").localeCompare(b.starts_on ?? "9999");
+  if (start !== 0) return start;
+  return a.position - b.position;
 }

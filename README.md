@@ -52,6 +52,8 @@ supabase start
 - `PUBLISHABLE_KEY` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SECRET_KEY` → `SUPABASE_SECRET_KEY`
 
+Plane tickets are read on the server with `GEMINI_API_KEY` from [Google AI Studio](https://aistudio.google.com/apikey). Without that key, upload falls back to the text parser.
+
 Then:
 
 ```bash
