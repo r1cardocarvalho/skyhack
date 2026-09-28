@@ -34,6 +34,10 @@ Travel agent assistant:
 - Days spent in a country
 - Flight delays and terminal info
 
+## Cursor skill
+
+Destination intel (SIM, plugs, scams, visas, emergencies) lives in [`.cursor/skills/destination-briefing/`](.cursor/skills/destination-briefing/). Fill `#USERINFO` in that folder (or User Rules) so briefings follow the traveler's passport and diet. See [`AGENTS.md`](AGENTS.md).
+
 ## Run it locally
 
 You need [Node.js](https://nodejs.org), [Docker Desktop](https://www.docker.com/products/docker-desktop/) (open and running), and the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
